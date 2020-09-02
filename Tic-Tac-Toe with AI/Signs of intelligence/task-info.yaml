@@ -1,0 +1,804 @@
+type: edu
+custom_name: stage4
+files:
+- name: src/tictactoe/Main.java
+  visible: true
+  text: |
+    package tictactoe;
+
+    public class Main {
+        public static void main(String[] args) {
+            // write your code here
+        }
+    }
+  learner_created: false
+- name: test/TicTacToeTest.java
+  visible: false
+  text: |
+    import org.hyperskill.hstest.exception.outcomes.WrongAnswer;
+    import org.hyperskill.hstest.stage.StageTest;
+    import org.hyperskill.hstest.testcase.CheckResult;
+    import org.hyperskill.hstest.testcase.TestCase;
+    import tictactoe.Main;
+
+    import java.util.ArrayList;
+    import java.util.List;
+    import java.util.stream.Collectors;
+
+    enum FieldState {
+        X, O, FREE;
+
+        static FieldState get(char symbol) {
+            switch (symbol) {
+                case 'X': return X;
+                case 'O': return O;
+                case ' ':
+                case '_':
+                    return FREE;
+                default: return null;
+            }
+        }
+    }
+
+    class TicTacToeField {
+
+        final FieldState[][] field;
+
+        TicTacToeField(FieldState[][] field) {
+            this.field = field;
+        }
+
+        boolean equalTo(TicTacToeField other) {
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (field[i][j] != other.field[i][j]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        boolean hasNextAs(TicTacToeField other) {
+            boolean improved = false;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (field[i][j] != other.field[i][j]) {
+                        if (field[i][j] == FieldState.FREE && !improved) {
+                            improved = true;
+                        }
+                        else {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return improved;
+        }
+
+        boolean isCloseTo(TicTacToeField other) {
+            return equalTo(other)
+                || hasNextAs(other)
+                || other.hasNextAs(this);
+        }
+
+        static TicTacToeField parse(String fieldStr) {
+
+            try {
+                List<String> lines = fieldStr
+                    .lines()
+                    .map(String::strip)
+                    .filter(e ->
+                        e.startsWith("|")
+                            && e.endsWith("|"))
+                    .collect(Collectors.toList());
+
+                for (String line : lines) {
+                    if (line.length() != 9) {
+                        throw new WrongAnswer("Line of Tic-Tac-Toe " +
+                            "field should be 9 characters long\n" +
+                            "found " + line.length() + " characters in \"" + line + "\"");
+                    }
+                    for (char c : line.toCharArray()) {
+                        if (c != 'X'
+                            && c != 'O'
+                            && c != '|'
+                            && c != ' '
+                            && c != '_') {
+                            return null;
+                        }
+                    }
+                }
+
+                FieldState[][] field = new FieldState[3][3];
+
+                int y = 2;
+                for (String line : lines) {
+                    char[] cols = new char[] {
+                        line.charAt(2),
+                        line.charAt(4),
+                        line.charAt(6)
+                    };
+
+                    int x = 0;
+                    for (char c : cols) {
+                        FieldState state = FieldState.get(c);
+                        if (state == null) {
+                            return null;
+                        }
+                        field[y][x] = state;
+                        x++;
+                    }
+                    y--;
+                }
+
+                return new TicTacToeField(field);
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+
+
+        static List<TicTacToeField> parseAll(String output) {
+            List<TicTacToeField> fields = new ArrayList<>();
+
+            List<String> lines = output
+                .lines()
+                .map(String::strip)
+                .filter(e -> e.length() > 0)
+                .collect(Collectors.toList());
+
+            String candidateField = "";
+            boolean insideField = false;
+            for (String line : lines) {
+                if (line.contains("----") && !insideField) {
+                    insideField = true;
+                    candidateField = "";
+                } else if (line.contains("----") && insideField) {
+                    TicTacToeField field = TicTacToeField.parse(candidateField);
+                    if (field != null) {
+                        fields.add(field);
+                    }
+                    insideField = false;
+                }
+
+                if (insideField && line.startsWith("|")) {
+                    candidateField += line + "\n";
+                }
+            }
+
+            return fields;
+        }
+
+    }
+
+
+    class Clue {
+        int x, y;
+        Clue(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    public class TicTacToeTest extends StageTest<Clue> {
+        public TicTacToeTest() throws Exception {
+            super(Main.class);
+        }
+
+        static String[] inputs = new String[] {
+            "1 1", "1 2", "1 3",
+            "2 1", "2 2", "2 3",
+            "3 1", "3 2", "3 3"
+        };
+
+        String iterateCells(String initial) {
+            int index = -1;
+            for (int i = 0; i < inputs.length; i++) {
+                if (initial.equals(inputs[i])) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index == -1) {
+                return "";
+            }
+            String fullInput = "";
+            for (int i = index; i < index + 9; i++) {
+                fullInput += inputs[i % inputs.length] + "\n";
+            }
+            return fullInput;
+        }
+
+        @Override
+        public List<TestCase<Clue>> generate() {
+
+            List<TestCase<Clue>> tests = new ArrayList<>();
+
+            int i = 0;
+            for (String input : inputs) {
+                String fullMoveInput = iterateCells(input);
+
+                String[] strNums = input.split(" ");
+                int x = Integer.parseInt(strNums[0]);
+                int y = Integer.parseInt(strNums[1]);
+
+                if (i % 2 == 1) {
+                    // mix with incorrect data
+                    fullMoveInput = "4 " + i + "\n" + fullMoveInput;
+                }
+
+                String fullGameInput = "";
+                for (int j = 0; j < 9; j++) {
+                    fullGameInput += fullMoveInput;
+                }
+
+                String initial;
+
+                switch (i % 4) {
+                    case 0: initial = "start user easy\n"; break;
+                    case 1: initial = "start easy user\n"; break;
+                    case 2: initial = "start user medium\n"; break;
+                    case 3: initial = "start medium user\n"; break;
+                    default: continue;
+                }
+
+                fullGameInput = initial + fullGameInput + "exit";
+
+                tests.add(new TestCase<Clue>()
+                    .setInput(fullGameInput));
+
+                i++;
+            }
+
+            tests.add(new TestCase<Clue>()
+                .setInput("start easy easy\nexit"));
+
+            tests.add(new TestCase<Clue>()
+                .setInput("start medium medium\nexit"));
+
+            tests.add(new TestCase<Clue>()
+                .setInput("start medium easy\nexit"));
+
+            tests.add(new TestCase<Clue>()
+                .setInput("start easy medium\nexit"));
+
+            tests.add(new TestCase<Clue>()
+                .setInput("start user user\n" +
+                    "1 1\n" +
+                    "2 2\n" +
+                    "1 2\n" +
+                    "2 1\n" +
+                    "1 3\n" +
+                    "exit"));
+
+            return tests;
+        }
+
+        @Override
+        public CheckResult check(String reply, Clue clue) {
+
+            List<TicTacToeField> fields = TicTacToeField.parseAll(reply);
+
+            if (fields.size() == 0) {
+                return new CheckResult(false, "No fields found");
+            }
+
+            for (int i = 1; i < fields.size(); i++) {
+                TicTacToeField curr = fields.get(i - 1);
+                TicTacToeField next = fields.get(i);
+
+                if (!(curr.equalTo(next) || curr.hasNextAs(next))) {
+                    return new CheckResult(false,
+                        "For two fields following each " +
+                            "other one is not a continuation " +
+                            "of the other (they differ more than in two places).");
+                }
+            }
+
+            return CheckResult.correct();
+        }
+    }
+  learner_created: false
+- name: src/tictactoe/EasyTK.java
+  visible: true
+  text: |
+    //package tictactoe;
+    //
+    //import java.util.Arrays;
+    //import java.util.Scanner;
+    //import java.util.regex.Pattern;
+    //
+    //public class EasyTK {
+    ////
+    ////    1,3(1)(1 1)   2,3(2)   3,3(3)
+    ////
+    ////    1,2(4)   2,2(5)   3,2(6)
+    ////
+    ////    1,1(7)   2,1(8)   3,1(9)
+    //
+    //    public static void main(String[] args) {
+    //        Boolean exs = false;
+    //        while (!exs) {
+    //            GameTK game1 = new GameTK();
+    //            game1.setupGame();
+    //            game1.printBoard();
+    //            game1.playGame();
+    //        }
+    //    }
+    //}
+    //class GameTK{
+    //    Character[][] gameArr = new Character[3][3];
+    //    Player[] players = new Player[2];
+    //    Player playerOne;
+    //    Player playerTwo;
+    //
+    //    public Game() {
+    //        this.gameArr = gameArr;
+    //    }
+    //
+    //    public void clearBoard(){
+    //        for (int i = 2; i >= 0; i--) {
+    //            for (int j = 0; j < 3; j++) {
+    //                gameArr[i][j] = ' ';
+    //            }
+    //        }
+    //    }
+    //
+    //    public void setupGame() {
+    //        clearBoard();
+    //        Scanner scan = new Scanner(System.in);
+    //        System.out.print("Input command: ");
+    //        String[] arrCmd = scan.nextLine().split(" ");
+    //
+    //        if (arrCmd[0].trim().equals("exit")) {
+    //            System. exit(0);
+    //        } else if (arrCmd[0].trim().equals("start")) {
+    //            if (arrCmd.length == 3) {
+    //                playerOne = selectPlayer('X', arrCmd[1]);
+    //                playerTwo = selectPlayer('O', arrCmd[2]);
+    //                players[0] = playerOne;
+    //                players[1] = playerTwo;
+    //
+    //            } else {
+    //                System.out.println("Bad parameters! (33)");
+    //            }
+    //        } else {
+    //            System.out.println("Bad parameters! (37)");
+    //        }
+    //    }
+    //
+    //    public void playGame(){
+    //
+    //        while(checkWins() == 'N'){
+    //            for (Player gamePlayer: players) {
+    //                placeMove(gamePlayer.enterMove(gameArr), gamePlayer);
+    //                printBoard();
+    //                switch (checkWins()) {
+    //                    case 'X':
+    //                    case 'O':
+    //                        System.out.println(checkWins() + " wins\n");
+    //                        break;
+    //                    case 'I':
+    //                        System.out.println("Impossible\n");
+    //                        break;
+    //                    case ' ':
+    //                        System.out.println("Draw\n");
+    //                        break;
+    //                }
+    //                if (checkWins() != 'N') {
+    //                    break;
+    //                }
+    //            }
+    //        }
+    //    }
+    //
+    //    private void endGame() {
+    //        setupGame();
+    //    }
+    //
+    //    private Player selectPlayer(char playerMark, String playerType) {
+    //        Player rtnPlayer = null;
+    //        switch (playerType.toLowerCase()) {
+    //            case "easy":
+    //                rtnPlayer = new Easy(playerMark);
+    //                break;
+    //            case "medium":
+    //                rtnPlayer = new Medium(playerMark);
+    //                break;
+    //            case "hard":
+    //                rtnPlayer = new Hard(playerMark);
+    //                break;
+    //            case "user":
+    //                rtnPlayer = new User(playerMark);
+    //                break;
+    //        }
+    //        return rtnPlayer;
+    //
+    //    }
+    //
+    //    public void printBoard() {
+    //        System.out.println("---------");
+    //        for (int i = 2; i >= 0; i--) {
+    //            System.out.print("| ");
+    //            for (int j = 0; j < 3; j++) {
+    //                System.out.print(gameArr[i][j] + " ");
+    //            }
+    //            System.out.print("|\n");
+    //        }
+    //        System.out.println("---------");
+    //    }
+    //
+    //    public Character checkWins() {
+    //        int blankCount = 0;
+    //        int xCount = 0;
+    //        int oCount = 0;
+    //        for (int i = 0; i < 3; i++) {
+    //            for (int j = 0; j < 3; j++) {
+    //                char xo = gameArr[i][j];
+    //                switch (xo){
+    //                    case ' ':
+    //                        blankCount++;
+    //                        break;
+    //                    case 'X':
+    //                        xCount++;
+    //                        break;
+    //                    case 'O':
+    //                        oCount++;
+    //                        break;
+    //                    default:
+    //                        System.out.println(xo);
+    //                        break;
+    //                }
+    //            }
+    //        }
+    ////        System.out.println("blankCount: " + blankCount + " xCount: " + xCount + " oCount: " + oCount);
+    //
+    //        Character winner = ' ';
+    //
+    //        Character threeInARow = ' ';
+    //        int count = 0;
+    //
+    //        for (int i = 0; i < 3; i++) {
+    //            if (gameArr[i][0].equals(gameArr[i][1]) && gameArr[i][0].equals(gameArr[i][2]) && !gameArr[i][0].equals(' ')) {
+    //                threeInARow = gameArr[i][0];
+    //                count++;
+    //            }
+    //
+    //            if (gameArr[0][i].equals(gameArr[1][i]) && gameArr[0][i].equals(gameArr[2][i]) && !gameArr[0][i].equals(' ')) {
+    //                threeInARow = gameArr[0][i];
+    //                count++;
+    //            }
+    //        }
+    //        if (gameArr[0][0].equals(gameArr[1][1]) && gameArr[0][0].equals(gameArr[2][2]) && !gameArr[0][0].equals(' ')) {
+    //            threeInARow = gameArr[0][0];
+    //            count++;
+    //        }
+    //
+    //        if (gameArr[0][2].equals(gameArr[1][1]) && gameArr[0][2].equals(gameArr[2][0]) && !gameArr[0][2].equals(' ')) {
+    //            threeInARow = gameArr[0][2];
+    //            count++;
+    //        }
+    //        if (count <= 1) {
+    //            winner = threeInARow;
+    //        } else {
+    //            winner = 'I';
+    //        }
+    //
+    //        if (blankCount > 0 && winner.equals(' ') && (xCount == oCount + 1 || xCount == oCount - 1 || xCount == oCount)) {
+    //            winner = 'N';
+    //        }
+    //        if (xCount != oCount && winner.equals(' ') && (xCount != oCount + 1 && xCount != oCount - 1)) {
+    //            System.out.println("xCount: " + xCount + " oCount: " + oCount + " winner: " + winner+"|");
+    //            winner = 'I';
+    //        }
+    ////        System.out.println("winner: " + winner);
+    //        return winner;
+    //    }
+    //
+    //    public boolean placeMove(String nextCoords, Player currentPlayer) {
+    ////        System.out.println("nextCoords: "+ nextCoords);
+    //        boolean valid = false;
+    //        int nextCol = -1;
+    //        int nextRow = -1;
+    //
+    //        nextCol = Integer.parseInt(nextCoords.substring(0, 1));
+    //        nextRow = Integer.parseInt(nextCoords.substring(2));
+    //
+    //        if (currentPlayer.spaceAvailable(nextCol, nextRow, gameArr)) {
+    //            this.gameArr[nextRow - 1][nextCol - 1] = currentPlayer.playerMark;
+    //            valid = true;
+    //            if (!currentPlayer.playerType.equals("user")) {
+    //                System.out.println("Making move level \"" + currentPlayer.playerType + "\"");
+    //            }
+    //
+    //        } else {
+    //            if (currentPlayer.playerType.equals("user")){
+    //                System.out.println("This cell is occupied! Choose another one!");
+    //            }
+    //            placeMove(currentPlayer.enterMove(gameArr), currentPlayer);
+    //        }
+    //        return valid;
+    //    }
+    //
+    //}
+    //
+    //class Player{
+    //    char playerMark;
+    //    String playerType;
+    //
+    //    public Player(char playerMark) {
+    //        this.playerMark = playerMark;
+    //    }
+    //
+    //    public String enterMove(Character[][] gameArr) {
+    //        int nextCol = -1;
+    //        int nextRow = -1;
+    //        boolean valid = false;
+    //
+    //        Scanner scanner = new Scanner(System.in);
+    //        System.out.print("Enter the coordinates: ");
+    //        String nextCoords =  scanner.nextLine();
+    //
+    //        Pattern coordsPattern = Pattern.compile("([1-3]\\s[1-3])");
+    //
+    //        if (nextCoords.length() == 3 && coordsPattern.matcher(nextCoords).find()) {
+    //            nextCol = Integer.parseInt(nextCoords.substring(0, 1));
+    //            nextRow = Integer.parseInt(nextCoords.substring(2));
+    //
+    //            if ((nextCol < 0 || nextRow < 0) && nextCol > 3 || nextRow > 3) {
+    //                System.out.println("Coordinates should be from 1 to 3!");
+    //            } else {
+    //                valid = true;
+    //            }
+    //        } else {
+    //            System.out.println("You should enter numbers!");
+    //        }
+    //        if (!valid) {
+    //            enterMove(gameArr);
+    //        }
+    //        return nextCoords;
+    //    }
+    //
+    //    public boolean spaceAvailable(int x, int y, Character[][] gameArr){
+    //        if (gameArr[y-1][x-1] == ' ') {
+    //            return true;
+    //        }
+    //        return false;
+    //    }
+    //
+    //}
+    //
+    //class User extends Player{
+    //
+    //    public User(char playerMark) {
+    //        super(playerMark);
+    //        this.playerType = "user";
+    //    }
+    //}
+    //
+    //class Easy extends Player {
+    //
+    //    public Easy(char playerMark) {
+    //        super(playerMark);
+    //        this.playerType = "easy";
+    //    }
+    //
+    //    @Override
+    //    public String enterMove(Character[][] gameArr){
+    //        return randomMove(gameArr);
+    //    }
+    //
+    //    public String randomMove(Character[][] gameArr) {
+    //        int randomCol = (int) (Math.random() * 3) + 1;
+    //        int randomRow = (int) (Math.random() * 3) + 1;
+    //        if (spaceAvailable(randomCol, randomRow, gameArr)) {
+    //            randomMove(gameArr);
+    //        }
+    //        return randomCol + " " + randomRow;
+    //    }
+    //}
+    //
+    //class Medium extends Easy{
+    //
+    //    public Medium(char playerMark) {
+    //        super(playerMark);
+    //        this.playerType = "medium";
+    //    }
+    //
+    //    @Override
+    //    public String enterMove(Character[][] gameArr){
+    //        String rtnStr;
+    //        if (winMove(gameArr).equals(" ")) {
+    //            rtnStr = randomMove(gameArr);
+    //        } else {
+    //            rtnStr = winMove(gameArr);
+    //        }
+    //        return rtnStr;
+    //    }
+    //
+    //    public String winMove(Character[][] gameArr){
+    //        String gameString = arrToString(gameArr);
+    //
+    //        Pattern xPat31 = Pattern.compile("(^\\D{6}X{2}\\s)|(^\\D{2}\\s\\D{2}X\\D{2}X)|(^\\D{2}\\s[^0]X\\DX\\D{2})");
+    //        Pattern oPat31 = Pattern.compile("(^\\D{6}O{2}\\s)|(^\\D{2}\\s\\D{2}O\\D{2}O)|(^\\D{2}\\s[^0]O\\DO\\D{2})");
+    //
+    //        Pattern xPat23 = Pattern.compile("(^\\D{6}X\\sX)|(^\\DX\\D{2}X\\D{2}\\s)");
+    //        Pattern oPat23 = Pattern.compile("(^\\D{6}O\\sO)|(^\\DO\\D{2}O\\D{2}\\s)");
+    //
+    //        Pattern xPat13 = Pattern.compile("(^\\D{6}\\sX{2})|(^\\s\\D{2}X\\D{2}X\\D{2})|(^X\\D{2}\\s\\D{2}X\\D{2})|(^X\\D{2}X\\D{2}\\s\\D{2})|(^\\D{2}X\\DX\\D\\s\\D{2})");
+    //        Pattern oPat13 = Pattern.compile("(^\\D{6}\\sO{2})|(^\\s\\D{2}O\\D{2}O\\D{2})|(^O\\D{2}\\s\\D{2}O\\D{2})|(^O\\D{2}O\\D{2}\\s\\D{2})|(^\\D{2}O\\DO\\D\\s\\D{2})");
+    //
+    //        Pattern xPat32 = Pattern.compile("(^\\D{3}X{2}\\s\\D{3})|(^\\D{2}X\\D{2}\\s\\D{2}X)");
+    //        Pattern oPat32 = Pattern.compile("(^\\D{3}O{2}\\s\\D{3})|(^\\D{2}O\\D{2}\\s\\D{2}O)");
+    //
+    //        Pattern xPat22 = Pattern.compile("(^\\D{3}X\\sX\\D{3})|(^\\DX\\D{2}\\s\\D{2}X\\D)|(^X\\D{3}\\s\\D{3}X)|(^\\D{2}X\\D\\s\\DX\\D{2})");
+    //        Pattern oPat22 = Pattern.compile("(^\\D{3}O\\sO\\D{3})|(^\\DO\\D{2}\\s\\D{2}O\\D)|(^O\\D{3}\\s\\D{3}O)|(^\\D{2}O\\D\\s\\DO\\D{2})");
+    //
+    //        Pattern xPat12 = Pattern.compile("(^\\D{3}\\sX{2}\\D{3})|(^X\\D{2}\\s\\D{2}X\\D{2})");
+    //        Pattern oPat12 = Pattern.compile("(^\\D{3}\\sO{2}\\D{3})|(^O\\D{2}\\s\\D{2}O\\D{2})");
+    //
+    //        Pattern xPat33 = Pattern.compile("(^\\D{6}X{2}\\s)|(^\\D{2}X\\D{2}X\\D{2}\\s)|(^X\\D{3}X\\D{3}\\s)");
+    //        Pattern oPat33 = Pattern.compile("(^\\D{6}O{2}\\s)|(^\\D{2}O\\D{2}O\\D{2}\\s)|(^O\\D{3}O\\D{3}\\s)");
+    //
+    //        Pattern xPat21 = Pattern.compile("(^X\\sX\\D{6})|(^\\D\\s\\D{2}X\\D{2}X\\D)");
+    //        Pattern oPat21 = Pattern.compile("(^O\\sO\\D{6})|(^\\D\\s\\D{2}O\\D{2}O\\D)");
+    //
+    //        Pattern xPat11 = Pattern.compile("(^\\D{6}\\sX{2})|(^X\\D{2}X\\D{2}\\s\\D{2})|(^\\D{2}X\\DX\\D\\s\\D{2})");
+    //        Pattern oPat11 = Pattern.compile("(^\\D{6}\\sO{2})|(^O\\D{2}O\\D{2}\\s\\D{2})|(^\\D{2}O\\DO\\D\\s\\D{2})");
+    //
+    //        String rtnStr = null;
+    //        if ((xPat33.matcher(gameString).find() || oPat33.matcher(gameString).find()) && rtnStr == null) {
+    ////                3,3
+    //            rtnStr = "3 3";
+    //        } else if ((xPat23.matcher(gameString).find() || oPat23.matcher(gameString).find()) && rtnStr == null) {
+    //            //                2,3
+    //            rtnStr = "2 3";
+    //        } else if ((xPat13.matcher(gameString).find() || oPat13.matcher(gameString).find()) && rtnStr == null) {
+    //            //                1,3
+    //            rtnStr = "1 3";
+    //        } else if ((xPat32.matcher(gameString).find() || oPat32.matcher(gameString).find()) && rtnStr == null) {
+    //            //                3,2
+    //            rtnStr = "3 2";
+    //        } else if ((xPat22.matcher(gameString).find() || oPat22.matcher(gameString).find()) && rtnStr == null) {
+    //            //                2,2
+    //            rtnStr = "2 2";
+    //        } else if ((xPat12.matcher(gameString).find() || oPat12.matcher(gameString).find()) && rtnStr == null) {
+    //            //                1,2
+    //            rtnStr = "1 2";
+    //        } else if ((xPat31.matcher(gameString).find() || oPat31.matcher(gameString).find()) && rtnStr == null) {
+    //            //                3,1
+    //            rtnStr = "3 1";
+    //        } else if ((xPat21.matcher(gameString).find() || oPat21.matcher(gameString).find()) && rtnStr == null) {
+    //            //                2,1
+    //            rtnStr = "2 1";
+    //        } else if ((xPat11.matcher(gameString).find() || oPat11.matcher(gameString).find()) && rtnStr == null) {
+    ////                1,1
+    //            rtnStr = "1 1";
+    //        }
+    //        if (rtnStr == null) {
+    //            rtnStr = " ";
+    //        }
+    //        return rtnStr;
+    //    }
+    //
+    //    public String arrToString(Character[][] gameArr) {
+    //        String gameString = Arrays.toString(gameArr[0])+Arrays.toString(gameArr[1])+Arrays.toString(gameArr[2]);
+    //        gameString = gameString.replaceAll(",\\s|]|\\[", "");
+    //        return gameString;
+    //    }
+    //
+    //}
+    //
+    //class Hard extends Medium{
+    //
+    //    public Hard(char playerMark) {
+    //        super(playerMark);
+    //        this.playerType = "hard";
+    //    }
+    //
+    //    @Override
+    //    public String enterMove(Character[][] gameArr){
+    //        return bestMove(gameArr);
+    //
+    //    }
+    //
+    //    private String bestMove(Character[][] board) {
+    //
+    //        // AI to make its turn
+    //        int bestScore = Integer.MIN_VALUE;
+    //        String move = "";
+    //        for (int i = 0; i < 3; i++) {
+    //            for (int j = 0; j < 3; j++) {
+    //                // Is the spot available?
+    ////                System.out.println("board["+j+"]["+i+"]: " + board[j][i]);
+    //                if (board[j][i] == ' ') {
+    //                    board[j][i] = 'X';
+    //                    int score = minimax(board, 0, false);
+    //                    board[j][i] = ' ';
+    ////                    System.out.println("score: "+ score + " pair: "+ (i+1) + "" + (j+1) + " playerMark: "+playerMark);
+    //                    if (score > bestScore) {
+    //                        bestScore = score;
+    //                        move = (i+1) + " " + (j+1);
+    //                    }
+    //                }
+    //            }
+    //        }
+    ////        System.out.println("3 1:"+ board[0][2] +"|");
+    ////        System.out.println("move: " + move);
+    //        return move;
+    //    }
+    //
+    //    private int minimax(Character[][] board, int depth, boolean isMaximizing) {
+    //        if (gameOver(arrToString(board)) != ' ') {
+    //            if (!isMaximizing) {
+    //                int bestScore = Integer.MIN_VALUE;
+    //                for (int i = 0; i < 3; i++) {
+    //                    for (int j = 0; j < 3; j++) {
+    //                        // Is the spot available?
+    //                        if (board[j][i] == ' ') {
+    //                            board[j][i] = 'O';
+    //                            int score = minimax(board, depth + 1, true);
+    //                            board[j][i] = ' ';
+    //                            bestScore = Math.max(score, bestScore);
+    //                        }
+    //                    }
+    //                }
+    ////                System.out.println("bestScore1: " + bestScore);
+    //                return bestScore;
+    //            } else {
+    //                char oppMark;
+    //                if (playerMark == 'X') oppMark = 'O';
+    //                else {
+    //                    oppMark = 'X';
+    //                }
+    //                int bestScore = Integer.MAX_VALUE;
+    //                for (int i = 0; i < 3; i++) {
+    //                    for (int j = 0; j < 3; j++) {
+    //                        // Is the spot available?
+    //                        if (board[j][i] == ' ') {
+    //                            board[j][i] = 'X';
+    //                            int score = minimax(board, depth + 1, false);
+    //                            board[j][i] = ' ';
+    //                            bestScore = Math.min(score, bestScore);
+    //                        }
+    //                    }
+    //                }
+    ////                System.out.println("bestScore2: " + bestScore);
+    //                return bestScore;
+    //            }
+    //        } else {
+    //            if (gameOver(arrToString(board)) == playerMark) {
+    //                return 10;
+    //            } else {
+    //                return -10;
+    //            }
+    //        }
+    //    }
+    //
+    //    public static char gameOver(String gameString) {
+    //        Pattern xWins = Pattern.compile("(^X{3}\\D{6})|(^\\D{3}X{3}\\D{3})|(^\\D{6}X{3})|(^X\\D{2}X\\D{2}X\\D{2})|(^\\DX\\D{2}X\\D{2}X\\D)|(^\\D{2}X\\D{2}X\\D{2}X)|(^X\\D{3}X\\D{3}X)|(^\\D{2}X\\DX\\DX\\D{2})");
+    //        Pattern oWins = Pattern.compile("(^O{3}\\D{6})|(^\\D{3}O{3}\\D{3})|(^\\D{6}O{3})|(^O\\D{2}O\\D{2}O\\D{2})|(^\\DO\\D{2}O\\D{2}O\\D)|(^\\D{2}O\\D{2}O\\D{2}O)|(^O\\D{3}O\\D{3}O)|(^\\D{2}O\\DO\\DO\\D{2})");
+    //
+    ////        System.out.println("X: "+ xWins.matcher(gameString).find());
+    ////        System.out.println("O: "+ oWins.matcher(gameString).find());
+    //
+    //        char rtnChar = ' ';
+    //        if (xWins.matcher(gameString).find()) {
+    //            rtnChar = 'X';
+    //        }
+    //        if (oWins.matcher(gameString).find()) {
+    //            rtnChar = 'O';
+    //        }
+    //        return rtnChar;
+    //    }
+    //}
+    //
+  learner_created: true
+feedback_link: https://hyperskill.org/projects/81/stages/450/implement
+status: Solved
+feedback:
+  message: Congratulations! Continue on <a href="https://hyperskill.org/projects/81/stages/450/implement">JetBrains
+    Academy</a>
+  time: Wed, 02 Sep 2020 03:18:21 UTC
+record: 4
